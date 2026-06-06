@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1002557691776",
+    "project_id": "nexera-medibox",
+    "storage_bucket": "nexera-medibox.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1002557691776:android:0445b38490b25d9c491365",
+        "android_client_info": {
+          "package_name": "com.example.nexera_medibox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBB0kohcoiIXMdFKFnx3ynvWc2PUlqYbtQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
