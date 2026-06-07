@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'login_page.dart'; // Allows the logout button to return to the security gate
+import 'package:firebase_database/firebase_database.dart'; // Updated package to target RTDB
+import 'login_page.dart';
 
 class MediboxMonitorHome extends StatefulWidget {
   const MediboxMonitorHome({super.key});
@@ -20,7 +20,7 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
   String _selectedMonth = "06";
   String _selectedYear = "2026";
 
-  // Tracks pill configuration across the 8-slot matrix layout
+  // Tracks matrix allocation data model locally
   final Map<int, int> _compartmentPillCounts = {
     1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0
   };
@@ -31,41 +31,29 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
   final List<String> _months = List.generate(12, (i) => (i + 1).toString().padLeft(2, '0'));
   final List<String> _years = List.generate(6, (i) => (2026 + i).toString());
 
-  Future<void> syncMultiPillSchedule() async {
-    String formattedTime = "$_selectedHour:$_selectedMinute:$_selectedSecond";
-    String formattedDate = "$_selectedDay/$_selectedMonth/$_selectedYear";
+  // RTDB Instance Pointer Reference
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
 
-    // Identify which active compartment has pills scheduled
-    int primaryActiveCompartment = 1;
-    Map<String, int> dbCompartmentMap = {};
-    
-    _compartmentPillCounts.forEach((slotNum, pillCount) {
-      dbCompartmentMap['slot_$slotNum'] = pillCount;
-      if (pillCount > 0) {
-        primaryActiveCompartment = slotNum; // Tags active target slot for the ESP32
-      }
-    });
+  Future<void> syncMultiPillSchedule() async {
+    // Compile parameters into integers to match your ESP32's 'result.intValue' streams perfectly
+    int dayInt = int.parse(_selectedDay);
+    int hourInt = int.parse(_selectedHour);
+    int minuteInt = int.parse(_selectedMinute);
 
     try {
-      // Transmit variables in an aligned data profile structure
-      await FirebaseFirestore.instance
-          .collection('medibox')
-          .doc('device_01')
-          .set({
-        'alarm_time': formattedTime,
-        'alarm_date': formattedDate,
-        'hour': int.parse(_selectedHour),          // Raw value parsed directly for ESP32 loops
-        'minute': int.parse(_selectedMinute),      // Raw value parsed directly for ESP32 loops
-        'compartment': primaryActiveCompartment,  // Aligns matrix selector with micro-servo mapping
-        'compartments': dbCompartmentMap,         // Retains dashboard manifest records intact
+      // Deploys updates straight into your exact hardware node listener point
+      await _dbRef.child('AlarmSettings').update({
+        'day': dayInt,
+        'hour': hourInt,
+        'minute': minuteInt,
+        'isEnabled': true, // Flips to TRUE so your 'myAlarm.isEnabled == true' logic registers
         'extra_message': _msgController.text.isEmpty ? "Take your medicine" : _msgController.text,
         'pill_taken': false,
-        'isEnabled': true,
-      }, SetOptions(merge: true)); // Prevents overwriting adjacent device parameters
+      });
 
       _msgController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚡ Multi-Pill Manifest Synced Worldwide!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('⚡ RTDB Stream Packet Synced Instantly!'), backgroundColor: Colors.green),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -93,29 +81,28 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
           IconButton(
             icon: const Icon(Icons.logout_rounded, size: 20),
             onPressed: () {
-              // Secure session close returning back to login checkpoint
               Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => NexeraLoginPage()));
             },
           )
         ],
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('medibox').doc('device_01').snapshots(),
+      body: StreamBuilder<DatabaseEvent>(
+        // Connects your live UI elements to display RTDB streaming modifications
+        stream: FirebaseDatabase.instance.ref().child('AlarmSettings').onValue,
         builder: (context, snapshot) {
           if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final data = snapshot.data?.data() as Map<String, dynamic>?;
-          if (data == null) return const Center(child: Text('Device baseline profile missing.'));
-
-          final String liveTime = data['alarm_time'] ?? '00:00:00';
-          final String liveDate = data['alarm_date'] ?? '00/00/0000';
-          final String liveMsg = data['extra_message'] ?? 'None';
-          final bool pillTaken = data['pill_taken'] ?? true;
+          final Map<dynamic, dynamic>? data = snapshot.data?.snapshot.value as Map<dynamic, dynamic>?;
           
-          final Map<String, dynamic> liveSlots = data['compartments'] ?? {};
+          // Render safe fallback default constants if data node is initialized clean
+          final int liveHour = data?['hour'] ?? 0;
+          final int liveMinute = data?['minute'] ?? 0;
+          final int liveDay = data?['day'] ?? 0;
+          final String liveMsg = data?['extra_message'] ?? 'None';
+          final bool pillTaken = data?['pill_taken'] ?? true;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -145,25 +132,9 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('LIVE MONITOR: $liveDate @ $liveTime', style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+                      Text('LIVE RTDB HARDWARE MONITOR: Day $liveDay @ $liveHour:${liveMinute.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11)),
                       const Divider(color: Colors.white10),
-                      const Text('🚨 Active Pill Load Checklist:', style: TextStyle(fontSize: 12, color: Colors.white60)),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: List.generate(8, (i) {
-                          int slotNum = i + 1;
-                          int count = liveSlots['slot_$slotNum'] ?? 0;
-                          if (count == 0) return const SizedBox.shrink();
-                          return Chip(
-                            backgroundColor: Colors.amberAccent.withOpacity(0.1),
-                            side: const BorderSide(color: Colors.amberAccent),
-                            label: Text('Slot $slotNum: $count Pills', style: const TextStyle(fontSize: 11, color: Colors.amberAccent)),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text('Note: "$liveMsg"', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.white70)),
                     ],
                   ),
@@ -246,7 +217,7 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: const Color(0xFF0F2027), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: syncMultiPillSchedule,
                   icon: const Icon(Icons.cloud_done_rounded),
-                  label: const Text('DEPLOY MATRIX SELECTION TO DEVICE', style: TextStyle(fontWeight: FontWeight.bold)),
+                  label: const Text('DEPLOY STREAM PACKET TO DEVICE', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
