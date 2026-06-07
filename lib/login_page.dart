@@ -1,104 +1,178 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'home_page.dart'; // Your main Medibox dashboard page
+import 'home_page.dart';
 
 class NexeraLoginPage extends StatefulWidget {
+  const NexeraLoginPage({super.key});
+
   @override
-  _NexeraLoginPageState createState() => _NexeraLoginPageState();
+  State<NexeraLoginPage> createState() => _NexeraLoginPageState();
 }
 
 class _NexeraLoginPageState extends State<NexeraLoginPage> {
-  // Hardcoded master credentials for the entire team
-  final String masterEmail = "nexera.medibox@gmail.com";
-  final String masterPassword = "nexeraproject2026";
+  // ── Hardcoded master credentials ──────────────────────────────────────────
+  static const String _masterEmail    = "nexera.medibox@gmail.com";
+  static const String _masterPassword = "nexeraproject2026";
 
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _emailController    = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
+  bool _isLoading       = false;
+  bool _obscurePassword = true;
 
-  void _handleLogin() async {
-    String inputEmail = _emailController.text.trim();
-    String inputPassword = _passwordController.text.trim();
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
-    // 1. Strict verification checkpoint
-    if (inputEmail != masterEmail || inputPassword != masterPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: Unauthorized Nexera Team Credentials!")),
-      );
+  Future<void> _handleLogin() async {
+    final inputEmail    = _emailController.text.trim();
+    final inputPassword = _passwordController.text.trim();
+
+    // 1. Local credential gate
+    if (inputEmail != _masterEmail || inputPassword != _masterPassword) {
+      _showSnack("Unauthorized credentials. Try again.", Colors.redAccent);
       return;
     }
 
-    setState(() { _isLoading = true; });
+    setState(() => _isLoading = true);
 
     try {
-      // 2. Authenticate against your live Firebase Cloud engine
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: inputEmail, password: inputPassword);
+      // 2. Firebase Auth sign-in
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email:    inputEmail,
+        password: inputPassword,
+      );
 
-      if (userCredential.user != null) {
-        // Success! Route straight to the control panel
+      if (cred.user != null && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const MediboxMonitorHome()),
+          MaterialPageRoute(builder: (_) => const MediboxMonitorHome()),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Firebase Connection Failed: ${e.toString()}")),
-      );
+    } on Exception catch (e) {
+      _showSnack("Firebase error: $e", Colors.redAccent);
     } finally {
-      setState(() { _isLoading = false; });
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF121212), // Sleek dark mode theme
+      backgroundColor: const Color(0xFF0A1628),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                "NEXERA MEDIBOX",
-                style: TextStyle(color: Colors.blueAccent, fontSize: 28, fontWeight: FontWeight.bold),
+              // ── Logo / Icon ──────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(colors: [Color(0xFF00E5FF), Color(0xFF0A1628)]),
+                  boxShadow: [BoxShadow(color: Colors.cyanAccent.withOpacity(0.4), blurRadius: 30)],
+                ),
+                child: const Icon(Icons.medical_services_rounded, size: 52, color: Colors.white),
               ),
-              SizedBox(height: 8),
-              Text("Control Centre Authentication", style: TextStyle(color: Colors.grey)),
-              SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // ── Title ───────────────────────────────────────────────────
+              const Text(
+                "NEXERA MEDIBOX",
+                style: TextStyle(
+                  color: Colors.cyanAccent,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Control Centre Authentication",
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+              const SizedBox(height: 40),
+
+              // ── Email field ─────────────────────────────────────────────
               TextField(
                 controller: _emailController,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Team Email ID",
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
-                ),
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: Colors.white),
+                decoration: _inputDecoration("Team Email ID", Icons.email_outlined),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
+
+              // ── Password field ──────────────────────────────────────────
               TextField(
                 controller: _passwordController,
-                obscureText: true,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Security Password",
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
+                obscureText: _obscurePassword,
+                style: const TextStyle(color: Colors.white),
+                decoration: _inputDecoration(
+                  "Security Password",
+                  Icons.lock_outline_rounded,
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.white38,
+                    ),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
                 ),
               ),
-              SizedBox(height: 32),
-              _isLoading 
-                ? CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _handleLogin,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, minimumSize: Size(200, 45)),
-                    child: Text("Login to System"),
-                  ),
+              const SizedBox(height: 36),
+
+              // ── Login button ────────────────────────────────────────────
+              _isLoading
+                  ? const CircularProgressIndicator(color: Colors.cyanAccent)
+                  : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _handleLogin,
+                        icon: const Icon(Icons.login_rounded),
+                        label: const Text(
+                          "LOGIN TO SYSTEM",
+                          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.cyanAccent,
+                          foregroundColor: const Color(0xFF0A1628),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white54),
+      prefixIcon: Icon(icon, color: Colors.cyanAccent),
+      filled: true,
+      fillColor: const Color(0xFF1A2E4A),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFF2A4A6A)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Colors.cyanAccent, width: 1.5),
       ),
     );
   }
