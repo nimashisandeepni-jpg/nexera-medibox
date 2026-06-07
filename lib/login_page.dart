@@ -10,169 +10,80 @@ class NexeraLoginPage extends StatefulWidget {
 }
 
 class _NexeraLoginPageState extends State<NexeraLoginPage> {
-  // ── Hardcoded master credentials ──────────────────────────────────────────
-  static const String _masterEmail    = "nexera.medibox@gmail.com";
-  static const String _masterPassword = "nexeraproject2026";
+  final String masterEmail = "nexera.medibox@gmail.com";
+  final String masterPassword = "nexeraproject2026";
 
-  final TextEditingController _emailController    = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading       = false;
-  bool _obscurePassword = true;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
+  void _handleLogin() async {
+    String inputEmail = _emailController.text.trim();
+    String inputPassword = _passwordController.text.trim();
 
-  Future<void> _handleLogin() async {
-    final inputEmail    = _emailController.text.trim();
-    final inputPassword = _passwordController.text.trim();
-
-    // 1. Local credential gate
-    if (inputEmail != _masterEmail || inputPassword != _masterPassword) {
-      _showSnack("Unauthorized credentials. Try again.", Colors.redAccent);
+    if (inputEmail != masterEmail || inputPassword != masterPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error: Unauthorized Nexera Team Credentials!")),
+      );
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; });
 
     try {
-      // 2. Firebase Auth sign-in
-      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email:    inputEmail,
-        password: inputPassword,
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: inputEmail, password: inputPassword);
 
-      if (cred.user != null && mounted) {
+      if (userCredential.user != null && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const MediboxMonitorHome()),
+          MaterialPageRoute(builder: (context) => const MediboxMonitorHome()),
         );
       }
-    } on Exception catch (e) {
-      _showSnack("Firebase error: $e", Colors.redAccent);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Firebase Authentication Failed: ${e.toString()}")),
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; });
     }
-  }
-
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A1628),
+      backgroundColor: const Color(0xFF121212),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Logo / Icon ──────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const RadialGradient(colors: [Color(0xFF00E5FF), Color(0xFF0A1628)]),
-                  boxShadow: [BoxShadow(color: Colors.cyanAccent.withOpacity(0.4), blurRadius: 30)],
-                ),
-                child: const Icon(Icons.medical_services_rounded, size: 52, color: Colors.white),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Title ───────────────────────────────────────────────────
-              const Text(
-                "NEXERA MEDIBOX",
-                style: TextStyle(
-                  color: Colors.cyanAccent,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                "Control Centre Authentication",
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              ),
-              const SizedBox(height: 40),
-
-              // ── Email field ─────────────────────────────────────────────
+              const Text("NEXERA MEDIBOX", style: TextStyle(color: Colors.blueAccent, fontSize: 28, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text("Control Centre Authentication", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 32),
               TextField(
                 controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration("Team Email ID", Icons.email_outlined),
+                decoration: const InputDecoration(labelText: "Team Email ID", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
-
-              // ── Password field ──────────────────────────────────────────
               TextField(
                 controller: _passwordController,
-                obscureText: _obscurePassword,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration(
-                  "Security Password",
-                  Icons.lock_outline_rounded,
-                ).copyWith(
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      color: Colors.white38,
-                    ),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                ),
+                obscureText: true,
+                decoration: const InputDecoration(labelText: "Security Password", border: OutlineInputBorder()),
               ),
-              const SizedBox(height: 36),
-
-              // ── Login button ────────────────────────────────────────────
-              _isLoading
-                  ? const CircularProgressIndicator(color: Colors.cyanAccent)
-                  : SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _handleLogin,
-                        icon: const Icon(Icons.login_rounded),
-                        label: const Text(
-                          "LOGIN TO SYSTEM",
-                          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.cyanAccent,
-                          foregroundColor: const Color(0xFF0A1628),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
+              const SizedBox(height: 32),
+              _isLoading 
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _handleLogin,
+                    style: ElevatedButton.styleFrom(minimumSize: const Size(200, 45)),
+                    child: const Text("Login to System"),
+                  ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.white54),
-      prefixIcon: Icon(icon, color: Colors.cyanAccent),
-      filled: true,
-      fillColor: const Color(0xFF1A2E4A),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF2A4A6A)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Colors.cyanAccent, width: 1.5),
       ),
     );
   }
