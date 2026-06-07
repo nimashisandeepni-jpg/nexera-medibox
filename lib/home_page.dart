@@ -1,32 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nexera Medibox Multi-Dispenser',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F2027), brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
-      home: const MediboxMonitorHome(),
-    );
-  }
-}
+import 'login_page.dart'; // Allows the logout button to return to the security gate
 
 class MediboxMonitorHome extends StatefulWidget {
   const MediboxMonitorHome({super.key});
@@ -46,8 +20,7 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
   String _selectedMonth = "06";
   String _selectedYear = "2026";
 
-  // --- MULTI-COMPARTMENT PILL COUNT STATE ---
-  // Tracks how many pills are assigned to each of the 8 compartments
+  // Tracks pill configuration across the 8-slot matrix layout
   final Map<int, int> _compartmentPillCounts = {
     1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0
   };
@@ -62,23 +35,33 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
     String formattedTime = "$_selectedHour:$_selectedMinute:$_selectedSecond";
     String formattedDate = "$_selectedDay/$_selectedMonth/$_selectedYear";
 
-    // Convert our map into a format Firestore strings easily (e.g., {"slot_1": 2, "slot_2": 0})
+    // Identify which active compartment has pills scheduled
+    int primaryActiveCompartment = 1;
     Map<String, int> dbCompartmentMap = {};
+    
     _compartmentPillCounts.forEach((slotNum, pillCount) {
       dbCompartmentMap['slot_$slotNum'] = pillCount;
+      if (pillCount > 0) {
+        primaryActiveCompartment = slotNum; // Tags active target slot for the ESP32
+      }
     });
 
     try {
+      // Transmit variables in an aligned data profile structure
       await FirebaseFirestore.instance
           .collection('medibox')
           .doc('device_01')
-          .update({
+          .set({
         'alarm_time': formattedTime,
         'alarm_date': formattedDate,
-        'compartments': dbCompartmentMap, // Uploads the whole matrix together!
+        'hour': int.parse(_selectedHour),          // Raw value parsed directly for ESP32 loops
+        'minute': int.parse(_selectedMinute),      // Raw value parsed directly for ESP32 loops
+        'compartment': primaryActiveCompartment,  // Aligns matrix selector with micro-servo mapping
+        'compartments': dbCompartmentMap,         // Retains dashboard manifest records intact
         'extra_message': _msgController.text.isEmpty ? "Take your medicine" : _msgController.text,
         'pill_taken': false,
-      });
+        'isEnabled': true,
+      }, SetOptions(merge: true)); // Prevents overwriting adjacent device parameters
 
       _msgController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,10 +85,19 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F2027),
       appBar: AppBar(
-        title: const Text('NEXERA MULTI-PILL DISPENSER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        title: const Text('NEXERA MULTI-PILL DISPENSER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1)),
         backgroundColor: const Color(0xFF203A43),
         foregroundColor: Colors.white,
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, size: 20),
+            onPressed: () {
+              // Secure session close returning back to login checkpoint
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => NexeraLoginPage()));
+            },
+          )
+        ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('medibox').doc('device_01').snapshots(),
@@ -123,7 +115,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
           final String liveMsg = data['extra_message'] ?? 'None';
           final bool pillTaken = data['pill_taken'] ?? true;
           
-          // Read live compartment payload configurations safely
           final Map<String, dynamic> liveSlots = data['compartments'] ?? {};
 
           return SingleChildScrollView(
@@ -131,7 +122,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. COMPLIANCE ALERT BANNER
                 if (!pillTaken)
                   Card(
                     color: Colors.redAccent.withOpacity(0.15),
@@ -149,7 +139,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                   ),
                 const SizedBox(height: 14),
 
-                // 2. ACTIVE LIVE MANIFEST MONITOR PANEL
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(color: const Color(0xFF1F353D), borderRadius: BorderRadius.circular(16)),
@@ -160,7 +149,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                       const Divider(color: Colors.white10),
                       const Text('🚨 Active Pill Load Checklist:', style: TextStyle(fontSize: 12, color: Colors.white60)),
                       const SizedBox(height: 6),
-                      // Display all slots that contain pills (> 0)
                       Wrap(
                         spacing: 8,
                         runSpacing: 6,
@@ -182,7 +170,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                 ),
                 const SizedBox(height: 20),
 
-                // 3. TIME & DATE SCHEDULING ROW PICKERS
                 Row(
                   children: [
                     Expanded(
@@ -206,7 +193,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                 )),
                 const SizedBox(height: 16),
 
-                // 4. THE 8-COMPARTMENT MATRIX SELECTION ENGINE
                 const Text('⚙️ CONFIG COMPARTMENT PILL MATRIX (SLOTS 1 - 8)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white54)),
                 const SizedBox(height: 8),
                 GridView.builder(
@@ -249,14 +235,13 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                 ),
                 const SizedBox(height: 16),
 
-                // 5. INSTRUCTION NOTES FIELD
                 TextField(
                   controller: _msgController,
+                  style: const TextStyle(fontSize: 14, color: Colors.white),
                   decoration: const InputDecoration(labelText: 'Display Message (e.g. Eat well, Drink water)', prefixIcon: Icon(Icons.chat_outlined), border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 20),
 
-                // TRANSMISSION CONTROL SYNC
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: const Color(0xFF0F2027), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: syncMultiPillSchedule,

@@ -39,7 +39,7 @@ class _NexeraLoginPageState extends State<NexeraLoginPage> {
         // Success! Route straight to the control panel
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => MediboxMonitorHome()),
+          MaterialPageRoute(builder: (context) => const MediboxMonitorHome()),
         );
       }
     } catch (e) {
