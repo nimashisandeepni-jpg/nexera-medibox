@@ -31,13 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
-  
-  # Ensure these three are typed exactly like this:
-  firebase_core: ^3.1.1
-  firebase_auth: ^5.1.1
-  cloud_firestore: ^4.17.4
-  
+  # Firebase — all must be compatible with each other
+  firebase_core:     ^3.1.1
+  firebase_auth:     ^5.1.1
+  firebase_database: ^11.1.1
+  cloud_firestore:   ^5.6.12
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
