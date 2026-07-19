@@ -27,9 +27,13 @@ environment:
 # dependencies can be manually updated by changing the version numbers below to
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
+
+
 dependencies:
   flutter:
     sdk: flutter
+ 
+  
 
   # Firebase — all must be compatible with each other
   firebase_core:     ^3.1.1
@@ -37,6 +41,7 @@ dependencies:
   firebase_database: ^11.1.1
   cloud_firestore:   ^5.6.12
   intl: ^0.20.3
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

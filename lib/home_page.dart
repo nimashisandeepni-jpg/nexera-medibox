@@ -52,13 +52,15 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
         .listen((doc) {
       
       // 🔍 Terminal debug confirmation pipeline to track real-time hardware uploads
-      debugPrint("🔌 DATA GRABBED! Current Emergency Status: ${doc.data()?['emergency_active']}");
+      debugPrint("🔌 DATA GRABBED! Current Emergency Status in DB: ${doc.data()?['emergency_active']}");
 
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         setState(() {
-          // Intercept the emergency condition flag broadcasted from ESP32
-          _isEmergencyActive = data['emergency_active'] ?? false;
+          // 🔥 FIX: Latch the true state! If it becomes true once, keep it true until dismissed by app.
+          if (data['emergency_active'] == true) {
+            _isEmergencyActive = true;
+          }
 
           if (data['patient_message'] != null) _msgController.text = data['patient_message'];
           if (data['slot_names'] != null) {
@@ -89,7 +91,12 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
 
   Future<void> _dismissEmergencyAlert() async {
     try {
-      // Clear the live alarm payload in Firestore to reset the hardware and UI states simultaneously
+      // 1. Instantly drop the visual UI state local variable down to false
+      setState(() {
+        _isEmergencyActive = false;
+      });
+
+      // 2. Sync to the cloud so the physical ESP32 box stops buzzing
       await FirebaseFirestore.instance
           .collection('medibox')
           .doc('device_01')
@@ -183,7 +190,6 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // Removed the parent const statement to seamlessly build dynamic opacity levels
                     Text(
                       'The patient has flipped the emergency switch! Check on them immediately.',
                       textAlign: TextAlign.center,
@@ -208,7 +214,7 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
 
             Center(
               child: Image.asset(
-                'assets/nexera.png',
+                'assets/nexera.jpg',
                 height: 80,
                 errorBuilder: (context, error, stackTrace) {
                   return const Padding(
@@ -347,14 +353,24 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
             if (isEnabled) ...[
               const SizedBox(height: 6),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Icon(Icons.access_time, size: 14, color: Colors.white38),
                   const SizedBox(width: 6),
                   const Text('Alarm Time: ', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                  const SizedBox(width: 6),
-                  SizedBox(width: 52, child: _buildInlineDropdown(_routineHours[routine]!, _hours, (v) => setState(() => _routineHours[routine] = v!))),
-                  const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text(":", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold))),
-                  SizedBox(width: 52, child: _buildInlineDropdown(_routineMinutes[routine]!, _minutes, (v) => setState(() => _routineMinutes[routine] = v!))),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 70, 
+                    child: _buildInlineDropdown(_routineHours[routine]!, _hours, (v) => setState(() => _routineHours[routine] = v!)),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6), 
+                    child: Text(":", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                  ),
+                  SizedBox(
+                    width: 70, 
+                    child: _buildInlineDropdown(_routineMinutes[routine]!, _minutes, (v) => setState(() => _routineMinutes[routine] = v!)),
+                  ),
                 ],
               ),
             ],
@@ -421,18 +437,27 @@ class _MediboxMonitorHomeState extends State<MediboxMonitorHome> {
   }
 
   Widget _buildInlineDropdown(String current, List<String> options, ValueChanged<String?> onChange) {
-    return DropdownButtonFormField<String>(
-      value: current,
-      decoration: const InputDecoration(
-        contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), 
-        border: OutlineInputBorder(),
-        isDense: true,
-        fillColor: Color(0xFF0F172A),
-        filled: true,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white24, width: 1),
       ),
-      dropdownColor: const Color(0xFF1E293B),
-      items: options.map((v) => DropdownMenuItem(value: v, child: Center(child: Text(v, style: const TextStyle(fontSize: 12, color: Colors.white))))).toList(),
-      onChanged: onChange,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: current,
+          isDense: true,
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.tealAccent, size: 16),
+          dropdownColor: const Color(0xFF1E293B),
+          style: const TextStyle(fontSize: 13, color: Colors.white),
+          items: options.map((v) => DropdownMenuItem(
+            value: v, 
+            child: Text(v, style: const TextStyle(fontSize: 13, color: Colors.white)),
+          )).toList(),
+          onChanged: onChange,
+        ),
+      ),
     );
   }
 }
